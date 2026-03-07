@@ -12,12 +12,12 @@ from telegram.ext import (
 # ──────────────────────────────────────────────
 # НАСТРОЙКИ
 # ──────────────────────────────────────────────
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "ВАШ_ТОКЕН")
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "ВАШ_КЛЮЧ")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8630509629:AAEgI-20rf8XJtO-1qdYuhmHe4-bJvH6Ysk")
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "sk-9561fb8381ba42e6aebe7a82e6cd6971")
 BOT_NAME = "Братик"
 MAX_HISTORY = 30          # сколько сообщений помнит
 MAX_USER_FACTS = 10       # сколько фактов помнит о каждом пацане
-RANDOM_REPLY_CHANCE = 0.08  # шанс сам влезть в разговор (8%)
+RANDOM_REPLY_CHANCE = 0.30  # шанс сам влезть в разговор (30%)
 # ──────────────────────────────────────────────
 
 SYSTEM_PROMPT = f"""Ты — {BOT_NAME}, свой пацан в групповом чате который шарит за многое.
