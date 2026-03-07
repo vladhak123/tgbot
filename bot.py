@@ -1,5 +1,5 @@
 import os
-import json
+import random
 import logging
 from collections import defaultdict, deque
 from openai import OpenAI
@@ -12,21 +12,24 @@ from telegram.ext import (
 # ──────────────────────────────────────────────
 # НАСТРОЙКИ
 # ──────────────────────────────────────────────
-TELEGRAM_TOKEN = "8630509629:AAEgI-20rf8XJtO-1qdYuhmHe4-bJvH6Ysk"
-DEEPSEEK_API_KEY = "sk-9561fb8381ba42e6aebe7a82e6cd6971"
-BOT_NAME = "Братик"          # как бот представляется
-MAX_HISTORY = 150             # сообщений в памяти на чат
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "ВАШ_ТОКЕН")
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "ВАШ_КЛЮЧ")
+BOT_NAME = "Братик"
+MAX_HISTORY = 30          # сколько сообщений помнит
+MAX_USER_FACTS = 10       # сколько фактов помнит о каждом пацане
+RANDOM_REPLY_CHANCE = 0.08  # шанс сам влезть в разговор (8%)
 # ──────────────────────────────────────────────
 
 SYSTEM_PROMPT = f"""Ты — {BOT_NAME}, свой пацан в групповом чате который шарит за многое.
 Пишешь как человек в телеграме — живо, без официоза.
 Никаких скобок с действиями типа (смеясь) или (задумчиво) — просто текст.
-Когда спрашивают что-то интересное или просят объяснить — отвечаешь развёрнуто, с деталями, это интересно.
+Когда спрашивают что-то интересное или просят объяснить — отвечаешь развёрнуто, с деталями.
 Когда просто треплются — отвечаешь коротко и по-пацански.
 Троллишь и подкалываешь, но с умом.
 Если кто грузится — поддержишь без сюсюканья.
 Материшься умеренно, только к месту.
 Помнишь о чём говорили раньше, используешь это в разговоре.
+Знаешь пацанов в чате — их интересы, привычки, о чём они говорят.
 Своё мнение имеешь и отстаиваешь его.
 Зовут тебя {BOT_NAME}."""
 
@@ -36,52 +39,82 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Клиент DeepSeek (совместим с OpenAI SDK)
-client = OpenAI(
-    api_key=DEEPSEEK_API_KEY,
-    base_url="https://api.deepseek.com"
+client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+
+# Память чата — все сообщения подряд
+chat_history: dict[int, deque] = defaultdict(lambda: deque(maxlen=MAX_HISTORY))
+
+# Память о пацанах — что знаем о каждом
+user_facts: dict[int, dict[str, deque]] = defaultdict(
+    lambda: defaultdict(lambda: deque(maxlen=MAX_USER_FACTS))
 )
 
-# Память: chat_id -> deque of {role, content}
-memory: dict[int, deque] = defaultdict(lambda: deque(maxlen=MAX_HISTORY))
+
+def build_user_context(chat_id: int) -> str:
+    """Собирает контекст о пацанах для промпта."""
+    facts = user_facts[chat_id]
+    if not facts:
+        return ""
+    lines = ["Что знаешь о пацанах в этом чате:"]
+    for name, user_deque in facts.items():
+        if user_deque:
+            lines.append(f"- {name}: {', '.join(user_deque)}")
+    return "\n".join(lines)
 
 
-def ask_deepseek(chat_id: int, user_message: str, user_name: str) -> str:
-    """Отправляет запрос в DeepSeek с историей чата."""
-    history = memory[chat_id]
-    history.append({"role": "user", "content": f"{user_name}: {user_message}"})
+def extract_user_fact(name: str, message: str, chat_id: int):
+    """Простое извлечение фактов о пользователе из сообщения."""
+    keywords = [
+        "люблю", "играю", "смотрю", "работаю",
+        "занимаюсь", "хочу", "купил", "еду", "слушаю"
+    ]
+    msg_lower = message.lower()
+    for kw in keywords:
+        if kw in msg_lower:
+            idx = msg_lower.index(kw)
+            snippet = message[idx:idx+60].strip()
+            user_facts[chat_id][name].append(snippet)
+            break
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + list(history)
+
+def ask_deepseek(chat_id: int, prompt_override: str = None) -> str:
+    """Запрос к DeepSeek с полной историей чата."""
+    history = list(chat_history[chat_id])
+    user_context = build_user_context(chat_id)
+
+    system = SYSTEM_PROMPT
+    if user_context:
+        system += f"\n\n{user_context}"
+
+    messages = [{"role": "system", "content": system}]
+
+    if prompt_override:
+        messages.append({"role": "user", "content": prompt_override})
+    else:
+        messages += history
 
     try:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=messages,
-            max_tokens=500,
-            temperature=0.85,
+            max_tokens=600,
+            temperature=0.9,
         )
-        reply = response.choices[0].message.content.strip()
-        history.append({"role": "assistant", "content": reply})
-        return reply
+        return response.choices[0].message.content.strip()
     except Exception as e:
         logger.error(f"DeepSeek error: {e}")
-        return "Братан, что-то у меня голова не варит щас, попробуй позже 🤷"
+        return None
 
-
-# ──────────────────────────────────────────────
-# ХЕНДЛЕРЫ
-# ──────────────────────────────────────────────
 
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        f"Здарова, я {BOT_NAME} 🤙 Пишите, отвечу."
-    )
+    await update.message.reply_text(f"Здарова, я {BOT_NAME} 🤙")
 
 
 async def clear(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Очищает память для этого чата."""
-    memory[update.effective_chat.id].clear()
-    await update.message.reply_text("Память очищена, начинаем с чистого листа 🧹")
+    chat_id = update.effective_chat.id
+    chat_history[chat_id].clear()
+    user_facts[chat_id].clear()
+    await update.message.reply_text("Память очищена 🧹")
 
 
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -90,11 +123,21 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     chat_id = update.effective_chat.id
-    user_name = msg.from_user.first_name or "Аноним"
     text = msg.text.strip()
+    user_name = msg.from_user.first_name or "Аноним"
     bot_username = (await ctx.bot.get_me()).username
-
     is_private = update.effective_chat.type == "private"
+
+    # Всегда пишем сообщение в историю (читаем весь чат)
+    chat_history[chat_id].append({
+        "role": "user",
+        "content": f"{user_name}: {text}"
+    })
+
+    # Пробуем вытащить факт о пользователе
+    extract_user_fact(user_name, text, chat_id)
+
+    # Определяем надо ли отвечать
     is_reply_to_bot = (
         msg.reply_to_message and
         msg.reply_to_message.from_user and
@@ -102,32 +145,39 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
     is_mentioned = bot_username and f"@{bot_username}" in text
     is_name_mentioned = BOT_NAME.lower() in text.lower()
+    should_reply = is_private or is_reply_to_bot or is_mentioned or is_name_mentioned
 
-    # В группе реагируем только если: упомянули / ответили на сообщение бота / назвали по имени
-    if not is_private and not is_reply_to_bot and not is_mentioned and not is_name_mentioned:
+    # Случайно влезаем в разговор
+    random_jump = not should_reply and random.random() < RANDOM_REPLY_CHANCE
+
+    if not should_reply and not random_jump:
         return
 
-    # Убираем упоминание из текста
-    clean_text = text.replace(f"@{bot_username}", "").strip() if bot_username else text
-
-    logger.info(f"[{chat_id}] {user_name}: {clean_text}")
-
     await ctx.bot.send_chat_action(chat_id=chat_id, action="typing")
-    reply = ask_deepseek(chat_id, clean_text, user_name)
-    await msg.reply_text(reply)
 
+    if random_jump:
+        prompt = (
+            f"Ты читал переписку в чате. Вот последнее сообщение от {user_name}: «{text}». "
+            f"Влезь в разговор как свой пацан — коротко, к месту. "
+            f"Можешь поддержать, подколоть или добавить что-то интересное."
+        )
+        reply = ask_deepseek(chat_id, prompt_override=prompt)
+    else:
+        reply = ask_deepseek(chat_id)
 
-# ──────────────────────────────────────────────
-# ЗАПУСК
-# ──────────────────────────────────────────────
+    if reply:
+        chat_history[chat_id].append({
+            "role": "assistant",
+            "content": reply
+        })
+        await msg.reply_text(reply)
+
 
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("clear", clear))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
     logger.info(f"Бот {BOT_NAME} запущен...")
     app.run_polling()
 
