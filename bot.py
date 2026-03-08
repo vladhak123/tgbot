@@ -15,9 +15,9 @@ from telegram.ext import (
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8630509629:AAEgI-20rf8XJtO-1qdYuhmHe4-bJvH6Ysk")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "sk-9561fb8381ba42e6aebe7a82e6cd6971")
 BOT_NAME = "Братик"
-MAX_HISTORY = 30          # сколько сообщений помнит
-MAX_USER_FACTS = 10       # сколько фактов помнит о каждом пацане
-RANDOM_REPLY_CHANCE = 0.30  # шанс сам влезть в разговор (30%)
+MAX_HISTORY = 50          # сколько сообщений помнит
+MAX_USER_FACTS = 30       # сколько фактов помнит о каждом пацане
+RANDOM_REPLY_CHANCE = 0.80  # шанс сам влезть в разговор (80%)
 # ──────────────────────────────────────────────
 
 SYSTEM_PROMPT = f"""
