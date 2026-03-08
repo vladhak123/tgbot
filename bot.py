@@ -17,7 +17,7 @@ DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "sk-9561fb8381ba42e6aebe7a
 BOT_NAME = "Стасик"
 MAX_HISTORY = 50          # сколько сообщений помнит
 MAX_USER_FACTS = 30       # сколько фактов помнит о каждом пацане
-RANDOM_REPLY_CHANCE = 0.80  # шанс сам влезть в разговор (80%)
+RANDOM_REPLY_CHANCE = 0.10  # шанс сам влезть в разговор (10%)
 # ──────────────────────────────────────────────
 
 SYSTEM_PROMPT = f"""
