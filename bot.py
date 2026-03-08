@@ -14,8 +14,8 @@ from telegram.ext import (
 # ──────────────────────────────────────────────
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8630509629:AAEgI-20rf8XJtO-1qdYuhmHe4-bJvH6Ysk")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "sk-9561fb8381ba42e6aebe7a82e6cd6971")
-BOT_NAME = "Братик"
-MAX_HISTORY = 30
+BOT_NAME = "Стасик"
+MAX_HISTORY = 100
 RANDOM_REPLY_CHANCE = 0.25
 # ──────────────────────────────────────────────
 
